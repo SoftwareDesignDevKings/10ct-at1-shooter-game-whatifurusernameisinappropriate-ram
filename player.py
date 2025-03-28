@@ -1,11 +1,10 @@
 import pygame
-import app
 import math
-
 from bullet import Bullet
+import app
 
 class Player:
-    def __init__(self, x, y, assets):
+    def __init__(self, x, y, assets, game):
         self.x = x
         self.y = y
         self.speed = app.PLAYER_SPEED
@@ -28,15 +27,22 @@ class Player:
 
         self.bullet_speed = 10
         self.bullet_size = 10
-        self.bullet_count = 1
+        self.homing_bullet_count = 1
+        self.homing_side_bullet_count = 0
+        self.spray_bullet_count = 3
         self.shoot_cooldown = 1  # Reduced cooldown for rapid shooting
         self.shoot_timer = 0
+        self.spray_timer = 0
+        self.spray_interval = 180  # 3 seconds at 60 FPS
         self.bullets = []
 
-        self.power_up = None
         self.selecting_power_up = False
+        self.game = game  # Reference to the game instance
 
     def handle_input(self):
+        if self.game.paused or self.game.in_level_up_menu:
+            return
+
         keys = pygame.key.get_pressed()
 
         vel_x, vel_y = 0, 0
@@ -68,6 +74,9 @@ class Player:
             self.facing_left = False
 
     def update(self):
+        if self.game.paused or self.game.in_level_up_menu:
+            return
+
         for bullet in self.bullets:
             bullet.update()
 
@@ -85,9 +94,11 @@ class Player:
             self.rect.center = center
 
         self.shoot_timer += 1
+        self.spray_timer += 1
 
-        # Check for level up
-        self.check_level_up()
+        if self.spray_timer >= self.spray_interval:
+            self.shoot_spray_bullets()
+            self.spray_timer = 0
 
     def draw(self, surface):
         if self.facing_left:
@@ -103,7 +114,7 @@ class Player:
         self.health = max(0, self.health - amount)
 
     def shoot_toward_position(self, tx, ty):
-        if self.shoot_timer < self.shoot_cooldown:
+        if self.shoot_timer < self.shoot_cooldown or self.game.paused or self.game.in_level_up_menu:
             return
 
         dx = tx - self.x
@@ -115,43 +126,36 @@ class Player:
         vx = (dx / dist) * self.bullet_speed
         vy = (dy / dist) * self.bullet_speed
 
-        if self.power_up == "spread":
-            self.shoot_spread(vx, vy)
-        elif self.power_up == "minigun":
-            self.shoot_minigun(vx, vy)
-        elif self.power_up == "360":
-            self.shoot_360()
-        else:
+        # Homing bullets
+        for _ in range(self.homing_bullet_count):
             bullet = Bullet(self.x, self.y, vx, vy, self.bullet_size)
             self.bullets.append(bullet)
+
+        # Side bullets
+        angle_offset = math.radians(15)
+        for i in range(1, self.homing_side_bullet_count + 1):
+            angle_left = math.atan2(vy, vx) - i * angle_offset
+            angle_right = math.atan2(vy, vx) + i * angle_offset
+            vx_left = math.cos(angle_left) * self.bullet_speed
+            vy_left = math.sin(angle_left) * self.bullet_speed
+            vx_right = math.cos(angle_right) * self.bullet_speed
+            vy_right = math.sin(angle_right) * self.bullet_speed
+            bullet_left = Bullet(self.x, self.y, vx_left, vy_left, self.bullet_size)
+            bullet_right = Bullet(self.x, self.y, vx_right, vy_right, self.bullet_size)
+            self.bullets.append(bullet_left)
+            self.bullets.append(bullet_right)
 
         self.shoot_timer = 0
 
-    def shoot_spread(self, vx, vy):
-        angle_spread = 10
-        base_angle = math.atan2(vy, vx)
-        mid = (self.bullet_count - 1) / 2
+    def shoot_spray_bullets(self):
+        angle_offset = math.radians(360 / self.spray_bullet_count)
+        base_angle = 0
 
-        for i in range(3):  # Shoot 3 bullets in a spread
-            offset = i - mid
-            spread_radians = math.radians(angle_spread * offset)
-            angle = base_angle + spread_radians
+        for i in range(self.spray_bullet_count):
+            angle = base_angle + i * angle_offset
             final_vx = math.cos(angle) * self.bullet_speed
             final_vy = math.sin(angle) * self.bullet_speed
-
             bullet = Bullet(self.x, self.y, final_vx, final_vy, self.bullet_size)
-            self.bullets.append(bullet)
-
-    def shoot_minigun(self, vx, vy):
-        bullet = Bullet(self.x, self.y, vx, vy, self.bullet_size)
-        self.bullets.append(bullet)
-
-    def shoot_360(self):
-        for angle in range(0, 360, 30):  # Shoot bullets in 360 degrees
-            radians = math.radians(angle)
-            vx = math.cos(radians) * self.bullet_speed
-            vy = math.sin(radians) * self.bullet_speed
-            bullet = Bullet(self.x, self.y, vx, vy, self.bullet_size)
             self.bullets.append(bullet)
 
     def shoot_toward_mouse(self, pos):
@@ -163,27 +167,3 @@ class Player:
 
     def add_xp(self, amount):
         self.xp += amount
-
-    def check_level_up(self):
-        level_up_xp = self.level * 5  # Reduced XP required to level up
-        if self.xp >= level_up_xp:
-            self.level += 1
-            self.xp -= level_up_xp
-            self.display_level_up_message()
-
-            if self.level % 5 == 0:
-                self.selecting_power_up = True
-
-    def display_level_up_message(self):
-        print(f"Level Up! You are now level {self.level}")
-
-    def handle_power_up_selection(self, key):
-        if key == pygame.K_1:
-            self.power_up = "360"
-            self.selecting_power_up = False
-        elif key == pygame.K_2:
-            self.power_up = "spread"
-            self.selecting_power_up = False
-        elif key == pygame.K_3:
-            self.power_up = "minigun"
-            self.selecting_power_up = False

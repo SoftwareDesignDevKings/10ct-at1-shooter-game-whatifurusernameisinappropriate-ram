@@ -20,7 +20,7 @@ PLAYER_SCALE_FACTOR = 2
 FLOOR_TILE_SCALE_FACTOR = 2
 HEALTH_SCALE_FACTOR = 1
 
-PUSHBACK_DISTANCE = 80
+PUSHBACK_DISTANCE = 50
 ENEMY_KNOCKBACK_SPEED = 5
 
 # --------------------------------------------------------------------------
